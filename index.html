@@ -152,6 +152,7 @@ body{padding-bottom:calc(80px + env(safe-area-inset-bottom))!important}
 </style></head><body><div class="wrapc">
 <div class="head"><div class="k">Shot list · Unit A</div><h1>Daikin x BRX · Batch 5</h1><p>Thứ ba 17/11/2026 · OHWOW Studio, 700/17 QL13, Hiệp Bình · Director Tâm Lê · DOP Khải Trần</p></div>
 <div class="sync" id="sync"><i></i><span>Đang kết nối…</span></div>
+<div class="lf" style="grid-template-columns:86px 1fr"><label for="slname">Tên bạn</label><input id="slname" type="text" autocomplete="name" placeholder="VD: Khải - DOP" maxlength="40"></div>
 <div class="stats"><div><b>05:00</b><span>Call chung</span></div><div><b>07:00</b><span>Bấm máy</span></div><div><b>20:45</b><span>Wrap</span></div></div>
 <div class="card trk" id="trk"><h3>Tiến độ so với lịch</h3><div class="tg"><div><span>Unit A</span><b id="tA">—</b><i id="tAn"></i></div><div><span>Unit B</span><b id="tB">—</b><i id="tBn"></i></div></div>
 <ul class="fc" id="fc"></ul><p class="tnote" id="tnote"></p></div>
@@ -572,7 +573,7 @@ var KB={"1": [["1", "Cảnh cận", "Cảnh cận tay, Airman đang cầm điệ
    if(o.tk){var c=document.createElement("span");c.className="n";c.textContent=o.tk;li.appendChild(c)}ul.appendChild(li)});
   window.__log=out}
  var me="";
- function push(k){var o=edit(k,{at:Date.now()});if(me)o.by=me;dirty[k]=(dirty[k]||0)+1;var mark=dirty[k];saveLocal();var li=document.querySelector('.shot input[data-k="'+k+'"]');li=li&&li.closest(".shot");
+ function push(k){var o=edit(k,{at:Date.now()});var nm=(window.__slName&&window.__slName())||me;if(nm)o.by=nm;dirty[k]=(dirty[k]||0)+1;var mark=dirty[k];saveLocal();var li=document.querySelector('.shot input[data-k="'+k+'"]');li=li&&li.closest(".shot");
   if(!col){if(li)paint(li);renderLog();track();return}
   var st=li&&li.querySelector(".log .st");if(st){st.classList.add("busy");st.classList.remove("err");st.textContent="Đang lưu…"}
   var payload={done:!!o.done,dt:o.dt||0,src:o.src||"",tk:o.tk||"",at:o.at};if(o.by)payload.by=o.by;
@@ -651,4 +652,35 @@ var KB={"1": [["1", "Cảnh cận", "Cảnh cận tay, Airman đang cầm điệ
   },function(){clearTimeout(to)});
  })();
 })();
-</script></body></html>
+</script>
+<script>
+/* Firebase sync shim: cung cấp window.claude.use("db"/"user") cho trang khi chạy ngoài claude.ai */
+window.FIREBASE_CONFIG = null; /* <-- dán firebaseConfig vào đây */
+(function(){
+ var inp=document.getElementById("slname");
+ try{inp.value=localStorage.getItem("sl-name")||""}catch(e){}
+ inp.addEventListener("input",function(){try{localStorage.setItem("sl-name",inp.value.trim())}catch(e){}});
+ window.__slName=function(){return inp.value.trim()};
+ if(!window.FIREBASE_CONFIG||!window.FIREBASE_CONFIG.projectId)return;
+ var ready=new Promise(function(res){window.__fbReady=res});
+ window.claude={use:function(n){
+  if(n==="user")return Promise.resolve({name:function(){return window.__slName()}});
+  if(n==="db")return ready;
+  return Promise.resolve(null)}};
+})();
+</script>
+<script type="module">
+const cfg=window.FIREBASE_CONFIG;
+if(cfg&&cfg.projectId){
+ try{
+  const {initializeApp}=await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js");
+  const F=await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
+  const fs=F.getFirestore(initializeApp(cfg));
+  const db={collection(name){const c=F.collection(fs,"daikin-1711-"+name);return{
+   doc:id=>({set:v=>F.setDoc(F.doc(c,id),v)}),
+   onSnapshot:(cb,err)=>F.onSnapshot(c,s=>cb({docs:s.docs.map(d=>({id:d.id,data:()=>d.data()}))}),err)}}};
+  window.__fbReady(db);
+ }catch(e){console.error(e);window.__fbReady(null)}
+}
+</script>
+</body></html>
