@@ -655,36 +655,88 @@ var KB={"1": [["1", "Cảnh cận", "Cảnh cận tay, Airman đang cầm điệ
 })();
 </script>
 <script>
-/* Xuất Excel: sheet "Source log" cho editor + sheet "Shot list" đầy đủ */
+/* Xuất Excel (ExcelJS): Tổng quan · Source log (nhóm theo VID) · Shot list đầy đủ */
 (function(){
  var btn=document.getElementById("xl"),msg=document.getElementById("cps");
  function T(el,sel){var x=el.querySelector(sel);return x?x.textContent.trim():""}
- function hm(ts){if(!ts)return "";var d=new Date(ts);return d.toLocaleTimeString("vi-VN",{hour:"2-digit",minute:"2-digit"})}
- function rows(){var st=(window.__slState&&window.__slState())||{},out=[];
+ function hm(ts){if(!ts)return "";var d=new Date(ts),p=function(x){return(x<10?"0":"")+x};return p(d.getHours())+":"+p(d.getMinutes())}
+ function collect(){var st=(window.__slState&&window.__slState())||{},groups=[];
   document.querySelectorAll("section.vid").forEach(function(sec){
-   var isB=sec.id==="unit-b",vid=T(sec,".vh .vn"),title=T(sec,".vh h2"),room=T(sec,".vh .room"),mdl=T(sec,".vh .mdl");
+   var isB=sec.id==="unit-b",g={id:sec.id,unit:isB?"B":"A",vid:T(sec,".vh .vn"),title:T(sec,".vh h2"),room:T(sec,".vh .room"),mdl:T(sec,".vh .mdl"),time:T(sec,".vh .tr").replace("→"," → "),rows:[]};
    sec.querySelectorAll(".shot").forEach(function(li){var cb=li.querySelector("input[type=checkbox]");if(!cb)return;
-    var k=cb.getAttribute("data-k"),d=st[k]||{},lbl=li.getAttribute("data-lbl")||"",v=vid,sc=T(li,".sc");
+    var d=st[cb.getAttribute("data-k")]||{},lbl=li.getAttribute("data-lbl")||"",v=g.vid,sc=T(li,".sc"),act=T(li,".act");
     if(lbl.indexOf(" · ")>0){v=lbl.split(" · ")[0];sc=lbl.split(" · ")[1]}
+    if(isB&&act.indexOf(" · ")>0)act=act.split(" · ").slice(1).join(" · ");
     var meta={};li.querySelectorAll(".meta>div").forEach(function(m){var b=m.querySelector("b");if(!b)return;meta[b.textContent.trim()]=m.textContent.slice(b.textContent.length).trim()});
-    out.push({"Unit":isB?"B":"A","VID":v,"Tên video":isB?"":title,"Scene":sc,"Giờ lịch":T(li,".top .tm"),"Thời lượng":T(li,".top .q"),
-     "Hoạt cảnh":T(li,".act"),"Talent":[].map.call(li.querySelectorAll(".who"),function(w){return w.textContent.trim()}).join(", "),
-     "Tags":[].map.call(li.querySelectorAll(".tag"),function(w){return w.textContent.trim()}).join(" · "),
-     "Góc máy":meta["Góc máy"]||"","Đạo cụ":meta["Đạo cụ"]||"","Ghi chú":[meta["Ghi chú"],meta["Nội dung"]].filter(Boolean).join(" · "),
-     "Phòng":room,"Model":mdl,"Đã quay":d.done?"✓":"","Giờ tick":hm(d.dt),"Source":d.src||"","Ghi chú take":d.tk||"","Người ghi":d.by||""})})});
-  return out}
- function fit(ws,data,cols){ws["!cols"]=cols.map(function(c){var w=c.length;data.forEach(function(r){var v=String(r[c]||"");w=Math.max(w,Math.min(60,v.length))});return{wch:w+2}})}
- function go(){var all=rows(),XL=window.XLSX,wb=XL.utils.book_new();
-  var srcCols=["Unit","VID","Scene","Source","Ghi chú take","Người ghi","Giờ tick","Hoạt cảnh","Talent"],
-      src=all.filter(function(r){return r.Source||r["Ghi chú take"]}).map(function(r){var o={};srcCols.forEach(function(c){o[c]=r[c]});return o});
-  var w1=XL.utils.json_to_sheet(src.length?src:[{Unit:"Chưa có source nào được ghi"}],{header:srcCols});fit(w1,src,srcCols);XL.utils.book_append_sheet(wb,w1,"Source log");
-  var allCols=Object.keys(all[0]||{}),w2=XL.utils.json_to_sheet(all,{header:allCols});fit(w2,all,allCols);w2["!autofilter"]={ref:w2["!ref"]};XL.utils.book_append_sheet(wb,w2,"Shot list");
-  var n=new Date(),p=function(x){return(x<10?"0":"")+x};
-  XL.writeFile(wb,"Daikin_1711_source_log_"+p(n.getHours())+"h"+p(n.getMinutes())+".xlsx");
-  msg.textContent="Đã xuất "+src.length+" source / "+all.length+" shot"}
- btn.addEventListener("click",function(){if(window.XLSX)return go();msg.textContent="Đang tạo file…";
-  var sc=document.createElement("script");sc.src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
-  sc.onload=go;sc.onerror=function(){msg.textContent="Không tải được thư viện Excel, kiểm tra mạng"};document.head.appendChild(sc)});
+    if(isB&&meta["Nội dung"]){act=(act?act+" — ":"")+meta["Nội dung"];delete meta["Nội dung"]}
+    g.rows.push({unit:g.unit,vid:v,sc:sc.replace(/^SC\s*/,""),time:T(li,".top .tm"),dur:T(li,".top .q"),act:act,
+     cast:[].map.call(li.querySelectorAll(".who"),function(w){return w.textContent.trim()}).join(", "),
+     tags:[].map.call(li.querySelectorAll(".tag"),function(w){return w.textContent.trim()}).join(" · "),
+     cam:meta["Góc máy"]||"",prop:meta["Đạo cụ"]||"",note:[meta["Ghi chú"],meta["Nội dung"]].filter(Boolean).join(" · "),
+     done:!!d.done,dt:hm(d.dt),src:d.src||"",tk:d.tk||"",by:d.by||""})});
+   if(g.rows.length)groups.push(g)});
+  return groups}
+
+ var C={accent:"FF0A68B4",soft:"FFE3EEF8",ink:"FF16202A",mute:"FF5D6873",line:"FFDDE2E0",zebra:"FFF7F9F8",ok:"FF2D6A3E",okbg:"FFE2F1E5",warn:"FFA3271B",warnbg:"FFFBE5E1",white:"FFFFFFFF"};
+ var F="Arial",thin={style:"thin",color:{argb:C.line}},box={top:thin,left:thin,bottom:thin,right:thin};
+ function fill(c){return{type:"pattern",pattern:"solid",fgColor:{argb:c}}}
+ function title(ws,n,t,sub){ws.mergeCells(1,1,1,n);var a=ws.getCell(1,1);a.value=t;a.font={name:F,size:16,bold:true,color:{argb:C.white}};a.fill=fill(C.accent);a.alignment={vertical:"middle",indent:1};ws.getRow(1).height=34;
+  ws.mergeCells(2,1,2,n);var b=ws.getCell(2,1);b.value=sub;b.font={name:F,size:10,color:{argb:C.mute}};b.alignment={vertical:"middle",indent:1};ws.getRow(2).height=22;ws.getRow(3).height=8}
+ function header(ws,r,cols){var row=ws.getRow(r);cols.forEach(function(c,i){var x=row.getCell(i+1);x.value=c.h;x.font={name:F,size:10,bold:true,color:{argb:C.white}};x.fill=fill(C.ink);x.border=box;x.alignment={vertical:"middle",horizontal:c.al||"left",wrapText:true}});row.height=24;
+  cols.forEach(function(c,i){ws.getColumn(i+1).width=c.w})}
+ function cellRow(ws,r,vals,cols,bg){var row=ws.getRow(r);vals.forEach(function(v,i){var x=row.getCell(i+1),c=cols[i];x.value=v;x.font={name:c.mono?"Consolas":F,size:10,bold:!!c.b,color:{argb:C.ink}};x.border=box;if(bg)x.fill=fill(bg);x.alignment={vertical:"top",horizontal:c.al||"left",wrapText:!!c.wrap}});return row}
+ function band(ws,r,n,text){ws.mergeCells(r,1,r,n);var x=ws.getCell(r,1);x.value=text;x.font={name:F,size:11,bold:true,color:{argb:C.accent}};x.fill=fill(C.soft);x.border=box;x.alignment={vertical:"middle",indent:1};ws.getRow(r).height=22}
+ function page(ws,rowsRepeat){ws.pageSetup={orientation:"landscape",paperSize:9,fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:.3,right:.3,top:.4,bottom:.4,header:.2,footer:.2},printTitlesRow:rowsRepeat};ws.headerFooter={oddFooter:"&L&8Daikin x BRX · Batch 5 · 17/11/2026&R&8Trang &P/&N"}}
+
+ function build(){var G=collect(),wb=new ExcelJS.Workbook(),now=new Date(),stamp=hm(now.getTime())+" "+now.toLocaleDateString("vi-VN");
+  wb.creator="Shot list Daikin 17.11";wb.created=now;
+  var all=[].concat.apply([],G.map(function(g){return g.rows})),nDone=all.filter(function(r){return r.done}).length,nSrc=all.filter(function(r){return r.src}).length,nMiss=all.filter(function(r){return r.done&&!r.src}).length;
+  var sub="Thứ ba 17/11/2026 · OHWOW Studio · Xuất lúc "+stamp+" · "+nDone+"/"+all.length+" shot đã quay · "+nSrc+" có source"+(nMiss?" · "+nMiss+" thiếu source":"");
+
+  /* 1. Tổng quan */
+  var w0=wb.addWorksheet("Tổng quan",{views:[{state:"frozen",ySplit:4,showGridLines:false}],properties:{tabColor:{argb:C.accent}}});
+  var c0=[{h:"Unit",w:7,al:"center"},{h:"Video",w:18,b:true},{h:"Tên video",w:42,wrap:true},{h:"Phòng · Model",w:34,wrap:true},{h:"Giờ lịch",w:16,al:"center"},{h:"Số shot",w:9,al:"right"},{h:"Đã quay",w:9,al:"right"},{h:"Có source",w:10,al:"right"},{h:"Tiến độ",w:11,al:"right"}];
+  title(w0,c0.length,"TỔNG QUAN · DAIKIN x BRX · BATCH 5",sub);header(w0,4,c0);
+  G.forEach(function(g,i){var d=g.rows.filter(function(r){return r.done}).length,s=g.rows.filter(function(r){return r.src}).length,pct=g.rows.length?d/g.rows.length:0;
+   var row=cellRow(w0,5+i,[g.unit,g.vid,g.title||"Quay riêng (Unit B)",[g.room,g.mdl].filter(Boolean).join(" · "),g.time,g.rows.length,d,s,pct],c0,i%2?C.zebra:null);
+   var pc=row.getCell(9);pc.numFmt="0%";pc.font={name:F,size:10,bold:true,color:{argb:pct>=1?C.ok:pct>0?C.accent:C.mute}};if(pct>=1)pc.fill=fill(C.okbg);row.height=(g.title.length>40||(g.room+g.mdl).length>30)?30:18});
+  var tr=5+G.length,tot=cellRow(w0,tr,["","TỔNG","","","",all.length,nDone,nSrc,all.length?nDone/all.length:0],c0,C.soft);
+  tot.eachCell(function(x){x.font={name:F,size:10,bold:true,color:{argb:C.ink}}});tot.getCell(9).numFmt="0%";tot.height=22;page(w0,"4:4");
+
+  /* 2. Source log cho editor */
+  var w1=wb.addWorksheet("Source log",{views:[{state:"frozen",ySplit:4,showGridLines:false}],properties:{tabColor:{argb:C.ok}}});
+  var c1=[{h:"Unit",w:6,al:"center"},{h:"Scene",w:20,b:true,wrap:true},{h:"Source",w:18,mono:true,b:true},{h:"Ghi chú take",w:34,wrap:true},{h:"Người ghi",w:14},{h:"Giờ tick",w:9,al:"center"},{h:"Hoạt cảnh",w:50,wrap:true},{h:"Talent",w:20,wrap:true}];
+  title(w1,c1.length,"SOURCE LOG · DAIKIN x BRX · BATCH 5",sub);header(w1,4,c1);
+  var r=5,any=false;
+  G.forEach(function(g){var list=g.rows.filter(function(x){return x.done||x.src||x.tk});if(!list.length)return;any=true;
+   band(w1,r++,c1.length,g.vid+(g.title?"  ·  "+g.title:"")+"   ("+list.length+"/"+g.rows.length+" shot)");
+   list.forEach(function(x,i){var miss=x.done&&!x.src,row=cellRow(w1,r++,[x.unit,(g.unit==="B"?x.vid+" · ":"")+"SC "+x.sc,x.src||"Thiếu source",x.tk,x.by,x.dt,x.act,x.cast],c1,miss?C.warnbg:(i%2?C.zebra:null));
+    if(miss)row.getCell(3).font={name:F,size:10,italic:true,bold:true,color:{argb:C.warn}};
+    row.height=Math.max(18,Math.ceil(Math.max(x.act.length/55,x.tk.length/36,x.cast.length/20,x.sc.length>8?2:1,1))*14)})});
+  if(!any){w1.mergeCells(5,1,5,c1.length);var e=w1.getCell(5,1);e.value="Chưa có shot nào được tick hoặc ghi source.";e.font={name:F,size:11,italic:true,color:{argb:C.mute}};e.alignment={indent:1}}
+  page(w1,"4:4");
+
+  /* 3. Shot list đầy đủ, có bộ lọc */
+  var w2=wb.addWorksheet("Shot list",{views:[{state:"frozen",xSplit:3,ySplit:4,showGridLines:false}],properties:{tabColor:{argb:C.mute}}});
+  var c2=[{h:"Unit",w:6,al:"center"},{h:"Video",w:9,b:true},{h:"Scene",w:12,b:true},{h:"Giờ lịch",w:12,al:"center"},{h:"Phút",w:6,al:"right"},{h:"Hoạt cảnh",w:46,wrap:true},{h:"Talent",w:18,wrap:true},{h:"Tags",w:24,wrap:true},{h:"Góc máy",w:24,wrap:true},{h:"Đạo cụ",w:22,wrap:true},{h:"Ghi chú",w:34,wrap:true},{h:"Đã quay",w:9,al:"center"},{h:"Giờ tick",w:9,al:"center"},{h:"Source",w:16,mono:true,b:true},{h:"Ghi chú take",w:28,wrap:true},{h:"Người ghi",w:13}];
+  title(w2,c2.length,"SHOT LIST ĐẦY ĐỦ · DAIKIN x BRX · BATCH 5",sub);header(w2,4,c2);
+  r=5;G.forEach(function(g,gi){g.rows.forEach(function(x){var row=cellRow(w2,r++,[x.unit,x.vid.replace("VID ","V"),"SC "+x.sc,x.time,x.dur.replace("'",""),x.act,x.cast,x.tags,x.cam,x.prop,x.note,x.done?"✓":"",x.dt,x.src,x.tk,x.by],c2,gi%2?C.zebra:null);
+    var dc=row.getCell(12);if(x.done){dc.fill=fill(C.okbg);dc.font={name:F,size:11,bold:true,color:{argb:C.ok}}}
+    var dur=+x.dur.replace(/\D/g,"");if(dur)row.getCell(5).value=dur;
+    row.height=Math.max(18,Math.ceil(Math.max(x.act.length/50,x.note.length/38,x.cam.length/26,x.cast.length/18,x.tags.length/24,x.prop.length/22,x.tk.length/30,1))*14)})});
+  w2.autoFilter={from:{row:4,column:1},to:{row:Math.max(4,r-1),column:c2.length}};page(w2,"4:4");
+  return {wb:wb,nSrc:nSrc,nDone:nDone,n:all.length}}
+
+ function save(){var o=build(),p=function(x){return(x<10?"0":"")+x},n=new Date();
+  return o.wb.xlsx.writeBuffer().then(function(buf){var blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}),a=document.createElement("a");
+   a.href=URL.createObjectURL(blob);a.download="Daikin_1711_SourceLog_"+p(n.getHours())+"h"+p(n.getMinutes())+".xlsx";document.body.appendChild(a);a.click();
+   setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},4000);msg.textContent="Đã xuất: "+o.nSrc+" source · "+o.nDone+"/"+o.n+" shot đã quay"})}
+ window.__slBuild=build;
+ btn.addEventListener("click",function(){msg.textContent="Đang tạo file…";
+  if(window.ExcelJS)return save().catch(function(e){console.error(e);msg.textContent="Lỗi tạo file Excel"});
+  var sc=document.createElement("script");sc.src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js";
+  sc.onload=function(){save().catch(function(e){console.error(e);msg.textContent="Lỗi tạo file Excel"})};
+  sc.onerror=function(){msg.textContent="Không tải được thư viện Excel, kiểm tra mạng"};document.head.appendChild(sc)});
 })();
 </script>
 <script>
